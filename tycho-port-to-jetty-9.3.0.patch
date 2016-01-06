@@ -1,0 +1,29 @@
+--- tycho-bundles/org.eclipse.tycho.test.utils/src/main/java/org/eclipse/tycho/test/util/AbstractMonitorServlet.java~	2015-03-29 16:42:21.976690003 +0200
++++ tycho-bundles/org.eclipse.tycho.test.utils/src/main/java/org/eclipse/tycho/test/util/AbstractMonitorServlet.java	2015-03-29 16:48:04.996306637 +0200
+@@ -21,8 +21,6 @@
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpServletResponse;
+ 
+-import org.eclipse.jetty.server.Request;
+-
+ public abstract class AbstractMonitorServlet extends GenericServlet {
+ 
+     private static final long serialVersionUID = -7271350776954812609L;
+@@ -42,7 +40,7 @@
+         HttpServletRequest req = (HttpServletRequest) request;
+         HttpServletResponse res = (HttpServletResponse) response;
+ 
+-        String uri = ((Request) req).getUri().toString();
++        String uri = req.getRequestURI();
+         if (!uri.endsWith(".sha1") && !uri.endsWith(".md5")) {
+             accessedUrls.add(uri);
+         }
+@@ -51,7 +49,7 @@
+     }
+ 
+     protected void addUri(HttpServletRequest req) {
+-        String uri = ((Request) req).getUri().toString();
++        String uri = req.getRequestURI();
+         if (!accessedUrls.contains(uri)) {
+             accessedUrls.add(uri);
+         }
