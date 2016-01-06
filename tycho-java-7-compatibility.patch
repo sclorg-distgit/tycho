@@ -1,0 +1,137 @@
+From 08a04cbff4fc6393ec56c61fff7f859d1d707cd6 Mon Sep 17 00:00:00 2001
+From: Roland Grunberg <rgrunber@redhat.com>
+Date: Fri, 26 Jun 2015 15:34:12 -0400
+Subject: [PATCH] Respect compatibility with Java 7.
+
+---
+ org.fedoraproject.p2/META-INF/MANIFEST.MF          |  2 +-
+ .../p2/installer/impl/DefaultEclipseInstaller.java | 58 ++++++++++++++++------
+ xmvn-p2-installer-plugin/pom.xml                   |  4 +-
+ 3 files changed, 45 insertions(+), 19 deletions(-)
+
+diff --git a/fedoraproject-p2/org.fedoraproject.p2/META-INF/MANIFEST.MF b/fedoraproject-p2/org.fedoraproject.p2/META-INF/MANIFEST.MF
+index 4319079..2967c22 100644
+--- a/fedoraproject-p2/org.fedoraproject.p2/META-INF/MANIFEST.MF
++++ b/fedoraproject-p2/org.fedoraproject.p2/META-INF/MANIFEST.MF
+@@ -4,7 +4,7 @@ Bundle-Name: Fedora Project P2 Repository
+ Bundle-SymbolicName: org.fedoraproject.p2;singleton:=true
+ Bundle-Version: 0.0.1.qualifier
+ Bundle-Vendor: Fedora
+-Bundle-RequiredExecutionEnvironment: JavaSE-1.8
++Bundle-RequiredExecutionEnvironment: JavaSE-1.7
+ Require-Bundle: org.eclipse.core.runtime,
+  org.eclipse.equinox.p2.metadata,
+  org.eclipse.equinox.p2.repository,
+diff --git a/fedoraproject-p2/org.fedoraproject.p2/src/org/fedoraproject/p2/installer/impl/DefaultEclipseInstaller.java b/fedoraproject-p2/org.fedoraproject.p2/src/org/fedoraproject/p2/installer/impl/DefaultEclipseInstaller.java
+index 35c6657..77da1f5 100644
+--- a/fedoraproject-p2/org.fedoraproject.p2/src/org/fedoraproject/p2/installer/impl/DefaultEclipseInstaller.java
++++ b/fedoraproject-p2/org.fedoraproject.p2/src/org/fedoraproject/p2/installer/impl/DefaultEclipseInstaller.java
+@@ -26,11 +26,11 @@ import java.util.List;
+ import java.util.Map;
+ import java.util.Map.Entry;
+ import java.util.Set;
+-import java.util.stream.Collectors;
+ 
+ import org.eclipse.equinox.p2.metadata.IArtifactKey;
+ import org.eclipse.equinox.p2.metadata.IInstallableUnit;
+ import org.eclipse.equinox.p2.metadata.IInstallableUnitFragment;
++import org.eclipse.equinox.p2.metadata.IProvidedCapability;
+ import org.eclipse.equinox.p2.metadata.IRequirement;
+ import org.eclipse.equinox.p2.query.IQuery;
+ import org.eclipse.equinox.p2.query.QueryUtil;
+@@ -89,13 +89,27 @@ public class DefaultEclipseInstaller implements EclipseInstaller {
+ 		Director.publish(reactorRepo, plugins, features);
+ 		reactor = reactorRepo.getAllUnits();
+ 		// Remove all host localization fragments
+-		reactor.removeAll(reactor.stream()
+-                .filter(u -> u.getId().endsWith("translated_host_properties"))
+-                .collect(Collectors.toSet()));
+-		Set<Path> reactorPaths = reactor.stream().map(u -> P2Utils.getPath(u)).collect(Collectors.toSet());
+-		request.getArtifacts().stream().filter(a -> !reactorPaths.contains(a.getPath()))
+-				.forEach(a -> logger.error("Not a valid {}: {}", a.isFeature() ? "feature" : "plugin", a.getPath()));
+-		if (reactor.stream().collect(Collectors.summingInt(u -> u.getArtifacts().size()))
++		Set<IInstallableUnit> hostLocalizationFragments = new LinkedHashSet<>();
++		for (IInstallableUnit u : reactor) {
++		    if (u.getId().endsWith("translated_host_properties")) {
++		        hostLocalizationFragments.add(u);
++		    }
++		}
++		reactor.removeAll(hostLocalizationFragments);
++		Set<Path> reactorPaths = new LinkedHashSet<>();
++		for (IInstallableUnit u : reactor) {
++		    reactorPaths.add(P2Utils.getPath(u));
++		}
++		for (EclipseArtifact a : request.getArtifacts()) {
++		    if (!reactorPaths.contains(a.getPath())) {
++		        logger.error("Not a valid {}: {}", a.isFeature() ? "feature" : "plugin", a.getPath());
++		    }
++		}
++		int numOfArtifacts = 0;
++		for (IInstallableUnit u : reactor) {
++		    numOfArtifacts += u.getArtifacts().size();
++		}
++		if (numOfArtifacts
+ 				!= plugins.size() + features.size()) {
+ 			throw new RuntimeException("Reactor contains invalid plugin or feature");
+ 		}
+@@ -106,7 +120,10 @@ public class DefaultEclipseInstaller implements EclipseInstaller {
+ 		List<Path> sclConfs = request.getConfigFiles();
+ 		if (sclConfs.isEmpty())
+ 			sclConfs = EclipseSystemLayout.getSclConfFiles();
+-		List<SCL> scls = sclConfs.stream().map(c -> new SCL(c)).collect(Collectors.toList());
++		List<SCL> scls = new LinkedList<>();
++		for (Path c : sclConfs) {
++		    scls.add(new SCL(c));
++		}
+ 		index = new CompoundBundleRepository(scls);
+ 
+ 		SCL currentScl = scls.iterator().next();
+@@ -223,14 +240,23 @@ public class DefaultEclipseInstaller implements EclipseInstaller {
+ 								.get(unit);
+ 						requires.removeAll(content);
+ 						// Remove all fragments from requires generation
+-						requires.removeAll(requires.stream().filter(
+-						        r -> r.getProvidedCapabilities().stream().anyMatch(
+-						                p -> p.getNamespace().equals("osgi.fragment")))
+-                                        .collect(Collectors.toSet()));
++						Set<IInstallableUnit> fragments = new LinkedHashSet<>();
++						for (IInstallableUnit u : requires) {
++						    for (IProvidedCapability p : u.getProvidedCapabilities()) {
++						        if (p.getNamespace().equals("osgi.fragment")) {
++						            fragments.add(u);
++						            break;
++						        }
++						    }
++						}
++						requires.removeAll(fragments);
+ 						if (!requires.isEmpty()) {
+-							provide.setProperty("osgi.requires", requires
+-									.stream().map(u -> P2Utils.toString(u))
+-									.collect(Collectors.joining(",")));
++						    StringBuffer osgiRequiresString = new StringBuffer();
++						    for (IInstallableUnit u : requires) {
++						        osgiRequiresString.append(",");
++						        osgiRequiresString.append(P2Utils.toString(u));
++						    }
++							provide.setProperty("osgi.requires", osgiRequiresString.substring(1));
+ 						}
+ 					}
+ 				}
+diff --git a/fedoraproject-p2/xmvn-p2-installer-plugin/pom.xml b/fedoraproject-p2/xmvn-p2-installer-plugin/pom.xml
+index 2974dda..3ca2d3c 100644
+--- a/fedoraproject-p2/xmvn-p2-installer-plugin/pom.xml
++++ b/fedoraproject-p2/xmvn-p2-installer-plugin/pom.xml
+@@ -85,8 +85,8 @@
+         <plugin>
+           <artifactId>maven-compiler-plugin</artifactId>
+           <configuration>
+-            <source>1.8</source>
+-            <target>1.8</target>
++            <source>1.7</source>
++            <target>1.7</target>
+           </configuration>
+         </plugin>
+       </plugins>
+-- 
+2.1.0
+

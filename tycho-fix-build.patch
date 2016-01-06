@@ -1,0 +1,176 @@
+From 33bb1bece17d1b6f6e81b149828fa1287aa61093 Mon Sep 17 00:00:00 2001
+From: Roland Grunberg <rgrunber@redhat.com>
+Date: Tue, 12 Jun 2012 09:56:38 -0400
+Subject: [PATCH] Fix the Tycho build to work on Fedora.
+
+Minor fixes of limited scope needed to have Tycho building on Fedora.
+
+Remove org.eclipse.equinox.concurrent until present in Fedora Eclipse.
+
+Tycho upstream currently depends upon 0.15.0 when building
+0.16.0-SNAPSHOT, which doesn't have reactor plugin version checking. In
+Fedora we depend on the previously built version which has that version
+checking. We must keep previous build version strings different to avoid
+a cyclic dependency, but doing so causes the version checking to fail,
+so we must provide a way to disable it. Disable by default.
+
+Update to using Jetty 9 API.
+
+Update to using maven-surefire 2.18.
+
+Change-Id: Ic8c0514c1fa10ee53580d2654ac6a363ccd66814
+---
+ .../META-INF/MANIFEST.MF                                      |  2 +-
+ .../eclipse/tycho/p2/target/ee/CustomEEResolutionHandler.java |  2 +-
+ .../src/main/java/org/eclipse/tycho/test/util/HttpServer.java |  8 ++++++--
+ .../tycho-bundles-external/tycho-bundles-external.product     |  1 -
+ .../tycho-standalone-p2-director/p2 Director.product          |  1 -
+ .../tycho/core/maven/TychoMavenLifecycleParticipant.java      |  4 +++-
+ .../eclipse/tycho/surefire/osgibooter/OsgiSurefireBooter.java |  2 +-
+ .../org/eclipse/tycho/test/AbstractTychoIntegrationTest.java  | 11 +++++------
+ 8 files changed, 17 insertions(+), 14 deletions(-)
+
+diff --git a/tycho-bundles/org.eclipse.tycho.p2.maven.repository.tests/META-INF/MANIFEST.MF b/tycho-bundles/org.eclipse.tycho.p2.maven.repository.tests/META-INF/MANIFEST.MF
+index 4243cfd..eca4c01 100644
+--- a/tycho-bundles/org.eclipse.tycho.p2.maven.repository.tests/META-INF/MANIFEST.MF
++++ b/tycho-bundles/org.eclipse.tycho.p2.maven.repository.tests/META-INF/MANIFEST.MF
+@@ -9,7 +9,7 @@ Fragment-Host: org.eclipse.tycho.p2.maven.repository
+ Require-Bundle: org.junit,
+  org.eclipse.equinox.p2.publisher,
+  org.eclipse.equinox.ds,
+- org.mockito
++ org.mockito.mockito-core
+ Import-Package: org.eclipse.tycho.locking.facade,
+  org.eclipse.tycho.repository.local.testutil,
+  org.eclipse.tycho.repository.streaming.testutil,
+diff --git a/tycho-bundles/org.eclipse.tycho.p2.resolver.impl/src/main/java/org/eclipse/tycho/p2/target/ee/CustomEEResolutionHandler.java b/tycho-bundles/org.eclipse.tycho.p2.resolver.impl/src/main/java/org/eclipse/tycho/p2/target/ee/CustomEEResolutionHandler.java
+index 7afa13e..82962f9 100644
+--- a/tycho-bundles/org.eclipse.tycho.p2.resolver.impl/src/main/java/org/eclipse/tycho/p2/target/ee/CustomEEResolutionHandler.java
++++ b/tycho-bundles/org.eclipse.tycho.p2.resolver.impl/src/main/java/org/eclipse/tycho/p2/target/ee/CustomEEResolutionHandler.java
+@@ -59,7 +59,7 @@ class CustomEEResolutionHandler extends ExecutionEnvironmentResolutionHandler {
+             String name = capability.getName();
+             String version = capability.getVersion().toString();
+ 
+-            if (JREAction.NAMESPACE_OSGI_EE.equals(namespace)) {
++            if ("osgi.ee".equals(namespace)) {
+                 result.add(new SystemCapability(Type.OSGI_EE, name, version));
+             } else if (PublisherHelper.CAPABILITY_NS_JAVA_PACKAGE.equals(namespace)) {
+                 result.add(new SystemCapability(Type.JAVA_PACKAGE, name, version));
+diff --git a/tycho-bundles/org.eclipse.tycho.test.utils/src/main/java/org/eclipse/tycho/test/util/HttpServer.java b/tycho-bundles/org.eclipse.tycho.test.utils/src/main/java/org/eclipse/tycho/test/util/HttpServer.java
+index 6e65627..eefc753 100644
+--- a/tycho-bundles/org.eclipse.tycho.test.utils/src/main/java/org/eclipse/tycho/test/util/HttpServer.java
++++ b/tycho-bundles/org.eclipse.tycho.test.utils/src/main/java/org/eclipse/tycho/test/util/HttpServer.java
+@@ -17,6 +17,11 @@ import java.util.List;
+ import java.util.Map;
+ import java.util.Random;
+ 
++import org.eclipse.jetty.security.ConstraintMapping;
++import org.eclipse.jetty.security.ConstraintSecurityHandler;
++import org.eclipse.jetty.security.HashLoginService;
++import org.eclipse.jetty.server.AbstractNetworkConnector;
++import org.eclipse.jetty.server.Connector;
+ import org.eclipse.jetty.server.Server;
+ import org.eclipse.jetty.server.ServerConnector;
+ import org.eclipse.jetty.servlet.ServletContextHandler;
+@@ -76,8 +81,7 @@ public class HttpServer extends ExternalResource {
+ 
+     private static RunningServer startServerOnPort(int port) throws Exception {
+         Server jetty = new Server();
+-        ServerConnector connector = new ServerConnector(jetty);
+-        connector.setHost("localhost");
++        AbstractNetworkConnector connector = new ServerConnector(jetty);
+         connector.setPort(port);
+         jetty.addConnector(connector);
+ 
+diff --git a/tycho-bundles/tycho-bundles-external/tycho-bundles-external.product b/tycho-bundles/tycho-bundles-external/tycho-bundles-external.product
+index 814afe1..0dc0980 100644
+--- a/tycho-bundles/tycho-bundles-external/tycho-bundles-external.product
++++ b/tycho-bundles/tycho-bundles-external/tycho-bundles-external.product
+@@ -43,7 +43,6 @@
+       <plugin id="org.eclipse.ecf.ssl" fragment="true"/>
+       <plugin id="org.eclipse.equinox.app"/>
+       <plugin id="org.eclipse.equinox.common"/>
+-      <plugin id="org.eclipse.equinox.concurrent"/>
+       <plugin id="org.eclipse.equinox.ds"/>
+       <plugin id="org.eclipse.equinox.frameworkadmin"/>
+       <plugin id="org.eclipse.equinox.frameworkadmin.equinox"/>
+diff --git a/tycho-bundles/tycho-standalone-p2-director/p2 Director.product b/tycho-bundles/tycho-standalone-p2-director/p2 Director.product
+index 771d4f7..eabd0d9 100644
+--- a/tycho-bundles/tycho-standalone-p2-director/p2 Director.product	
++++ b/tycho-bundles/tycho-standalone-p2-director/p2 Director.product	
+@@ -42,7 +42,6 @@
+       <plugin id="org.eclipse.ecf.ssl" fragment="true"/>
+       <plugin id="org.eclipse.equinox.app"/>
+       <plugin id="org.eclipse.equinox.common"/>
+-      <plugin id="org.eclipse.equinox.concurrent"/>
+       <plugin id="org.eclipse.equinox.ds"/>
+       <plugin id="org.eclipse.equinox.frameworkadmin"/>
+       <plugin id="org.eclipse.equinox.frameworkadmin.equinox"/>
+diff --git a/tycho-core/src/main/java/org/eclipse/tycho/core/maven/TychoMavenLifecycleParticipant.java b/tycho-core/src/main/java/org/eclipse/tycho/core/maven/TychoMavenLifecycleParticipant.java
+index b00c344..bc05c2d 100644
+--- a/tycho-core/src/main/java/org/eclipse/tycho/core/maven/TychoMavenLifecycleParticipant.java
++++ b/tycho-core/src/main/java/org/eclipse/tycho/core/maven/TychoMavenLifecycleParticipant.java
+@@ -102,7 +102,9 @@ public class TychoMavenLifecycleParticipant extends AbstractMavenLifecyclePartic
+     }
+ 
+     private void validate(List<MavenProject> projects) throws MavenExecutionException {
+-        validateConsistentTychoVersion(projects);
++        if (System.getProperty("tycho.enableVersionCheck") != null) {
++            validateConsistentTychoVersion(projects);
++        }
+         validateUniqueBaseDirs(projects);
+     }
+ 
+diff --git a/tycho-testing-harness/src/main/java/org/eclipse/tycho/test/AbstractTychoIntegrationTest.java b/tycho-testing-harness/src/main/java/org/eclipse/tycho/test/AbstractTychoIntegrationTest.java
+index 097bdeb..f90b10c 100644
+--- a/tycho-testing-harness/src/main/java/org/eclipse/tycho/test/AbstractTychoIntegrationTest.java
++++ b/tycho-testing-harness/src/main/java/org/eclipse/tycho/test/AbstractTychoIntegrationTest.java
+@@ -115,12 +115,11 @@ public abstract class AbstractTychoIntegrationTest {
+             verifier.getCliOptions().add(customOptions);
+         }
+ 
+-        if (System.getProperty(SYSPROP_STATELOCATION) != null) {
+-            verifier.setForkJvm(false);
+-            String m2eresolver = System.getProperty("tychodev-maven.ext.class.path"); // XXX
+-            if (m2eresolver != null) {
+-                verifier.addCliOption("-Dmaven.ext.class.path=" + m2eresolver);
+-            }
++        String m2eState = System.getProperty("m2eclipse.workspace.state");
++        String m2eResolver = System.getProperty("m2eclipse.workspace.resolver");
++
++        if (m2eState != null && m2eResolver != null) {
++            verifier.getVerifierProperties().put("m2eclipse.workspace.state", m2eState);
+         }
+ 
+         return verifier;
+diff --git a/tycho-p2/tycho-p2-director-plugin/src/main/java/org/eclipse/tycho/plugins/p2/director/ProductArchiverMojo.java b/tycho-p2/tycho-p2-director-plugin/src/main/java/org/eclipse/tycho/plugins/p2/director/ProductArchiverMojo.java
+index e30aae3..0102465 100644
+--- a/tycho-p2/tycho-p2-director-plugin/src/main/java/org/eclipse/tycho/plugins/p2/director/ProductArchiverMojo.java
++++ b/tycho-p2/tycho-p2-director-plugin/src/main/java/org/eclipse/tycho/plugins/p2/director/ProductArchiverMojo.java
+@@ -27,7 +27,6 @@ import org.apache.maven.project.MavenProjectHelper;
+ import org.codehaus.plexus.archiver.Archiver;
+ import org.codehaus.plexus.archiver.ArchiverException;
+ import org.codehaus.plexus.archiver.tar.TarArchiver;
+-import org.codehaus.plexus.archiver.tar.TarArchiver.TarCompressionMethod;
+ import org.codehaus.plexus.archiver.tar.TarLongFileMode;
+ import org.eclipse.tycho.core.shared.TargetEnvironment;
+ import org.eclipse.tycho.plugins.tar.TarGzArchiver;
+@@ -98,9 +99,13 @@ public final class ProductArchiverMojo extends AbstractProductMojo {
+         productArchivers.put(TAR_GZ_ARCHIVE_FORMAT, new ProductArchiver() {
+             @Override
+             Archiver getArchiver() throws ArchiverException {
++                TarArchiver.TarCompressionMethod tarCompressionMethod = new TarArchiver.TarCompressionMethod();
++                tarCompressionMethod.setValue("gzip"); // surprisingly, compression names are private in plexus 
++                tarArchiver.setCompression(tarCompressionMethod);
+-                tarArchiver.setCompression(TarCompressionMethod.gzip);
+                 // avoid lots of long file path (> 100 chars) warnings
++                TarLongFileMode gnuMode = new TarLongFileMode();
++                gnuMode.setValue(TarLongFileMode.GNU);
++                tarArchiver.setLongfile(gnuMode);
+-                tarArchiver.setLongfile(TarLongFileMode.gnu);
+                 return tarArchiver;
+             }
+         });
+-- 
+2.1.0
+
