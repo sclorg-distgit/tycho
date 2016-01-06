@@ -1,0 +1,342 @@
+From 60ef0999229a2c7ccd0648ccfde99e4218939013 Mon Sep 17 00:00:00 2001
+From: Mat Booth <mat.booth@redhat.com>
+Date: Thu, 22 Jan 2015 11:50:22 +0000
+Subject: [PATCH] Fix a problem with filtering bundles where repositories for
+ different SCLs would erroneously contain duplicates and the wrong ones would
+ be seen by the requires generator.
+
+Signed-off-by: Mat Booth <mat.booth@redhat.com>
+---
+ .../p2/tests/CompoundBundleRepositoryTest.java     | 24 +++++-
+ .../fedoraproject/p2/AbstractBundleRepository.java | 85 ++++++++++++++++++++++
+ .../fedoraproject/p2/CompoundBundleRepository.java | 57 ++++++---------
+ .../fedoraproject/p2/FedoraBundleRepository.java   | 49 ++-----------
+ 4 files changed, 137 insertions(+), 78 deletions(-)
+ create mode 100644 org.fedoraproject.p2/src/org/fedoraproject/p2/AbstractBundleRepository.java
+
+diff --git a/fedoraproject-p2/org.fedoraproject.p2.tests/src/org/fedoraproject/p2/tests/CompoundBundleRepositoryTest.java b/fedoraproject-p2/org.fedoraproject.p2.tests/src/org/fedoraproject/p2/tests/CompoundBundleRepositoryTest.java
+index a68ea7a..fe4b0c9 100644
+--- a/fedoraproject-p2/org.fedoraproject.p2.tests/src/org/fedoraproject/p2/tests/CompoundBundleRepositoryTest.java
++++ b/fedoraproject-p2/org.fedoraproject.p2.tests/src/org/fedoraproject/p2/tests/CompoundBundleRepositoryTest.java
+@@ -1,5 +1,5 @@
+ /*******************************************************************************
+- * Copyright (c) 2014 Red Hat Inc.
++ * Copyright (c) 2014-2015 Red Hat Inc.
+  * All rights reserved. This program and the accompanying materials
+  * are made available under the terms of the Eclipse Public License v1.0
+  * which accompanies this distribution, and is available at
+@@ -182,4 +182,26 @@ public class CompoundBundleRepositoryTest extends RepositoryTest {
+ 		addExternalPlugin("base", "p", "1.2.3", false);
+ 		performTest("scl", "base");
+ 	}
++
++	// If a bundle both internal and external (i.e. it is symlinked into a
++	// dropin)
++	// Then the bundle should always be considered external since it is not the
++	// dropin that provides it
++	@Test
++	public void shadowingIntExtSameSCL() throws Exception {
++		addInternalPlugin("devtoolset", "org.junit", "1.0.0", false);
++		addExternalPlugin("devtoolset", "org.junit", "1.0.0", true);
++		performTest("devtoolset");
++	}
++
++	// If a bundle both internal and external in different SCLs (i.e. it is
++	// symlinked into a dropin from a dependency SCL)
++	// Then the bundle should always be considered external since it is not the
++	// dropin that provides it
++	@Test
++	public void shadowingIntExtDifferentSCL() throws Exception {
++		addInternalPlugin("devtoolset", "org.junit", "1.0.0", false);
++		addExternalPlugin("java-common", "org.junit", "1.0.0", true);
++		performTest("devtoolset", "java-common");
++	}
+ }
+diff --git a/fedoraproject-p2/org.fedoraproject.p2/src/org/fedoraproject/p2/AbstractBundleRepository.java b/fedoraproject-p2/org.fedoraproject.p2/src/org/fedoraproject/p2/AbstractBundleRepository.java
+new file mode 100644
+index 0000000..c2f21e4
+--- /dev/null
++++ b/fedoraproject-p2/org.fedoraproject.p2/src/org/fedoraproject/p2/AbstractBundleRepository.java
+@@ -0,0 +1,85 @@
++/*******************************************************************************
++ * Copyright (c) 2015 Red Hat Inc.
++ * All rights reserved. This program and the accompanying materials
++ * are made available under the terms of the Eclipse Public License v1.0
++ * which accompanies this distribution, and is available at
++ * http://www.eclipse.org/legal/epl-v10.html
++ *
++ * Contributors:
++ *     Red Hat Inc. - initial API and implementation
++ *******************************************************************************/
++package org.fedoraproject.p2;
++
++import java.io.IOException;
++import java.nio.file.Path;
++import java.util.Collections;
++import java.util.LinkedHashSet;
++import java.util.Set;
++
++import org.eclipse.equinox.p2.metadata.IInstallableUnit;
++
++/**
++ * Abstract bundle repository that contains filtering functionality so that
++ * duplicate bundles do not get returned from the
++ * {@link IFedoraBundleRepository} interface. All bundle repository
++ * implementations should extend this class and implement
++ * {@link #getDropinsLocations()}.
++ */
++public abstract class AbstractBundleRepository implements
++		IFedoraBundleRepository {
++
++	protected Set<IInstallableUnit> platformUnits;
++	protected Set<IInstallableUnit> internalUnits;
++	protected Set<IInstallableUnit> externalUnits;
++	private boolean filtered = false;
++
++	private void sortUnits() {
++		if (!filtered) {
++			internalUnits = new LinkedHashSet<>(internalUnits);
++			externalUnits = new LinkedHashSet<>(externalUnits);
++
++			Set<IInstallableUnit> commonUnits = new LinkedHashSet<>(
++					externalUnits);
++			commonUnits.retainAll(internalUnits);
++
++			internalUnits.removeAll(commonUnits);
++			externalUnits.removeAll(commonUnits);
++
++			for (IInstallableUnit unit : commonUnits) {
++				try {
++					Path path = P2Utils.getPath(unit);
++					if (path == null)
++						continue;
++					path = path.toRealPath();
++					for (Path dropin : getDropinsLocations()) {
++						if (path.startsWith(dropin))
++							internalUnits.add(unit);
++						else
++							externalUnits.add(unit);
++					}
++				} catch (IOException e) {
++				}
++			}
++			filtered = true;
++		}
++	}
++
++	public abstract Set<Path> getDropinsLocations();
++
++	@Override
++	public final Set<IInstallableUnit> getPlatformUnits() {
++		return Collections.unmodifiableSet(platformUnits);
++	}
++
++	@Override
++	public final Set<IInstallableUnit> getInternalUnits() {
++		sortUnits();
++		return Collections.unmodifiableSet(internalUnits);
++	}
++
++	@Override
++	public final Set<IInstallableUnit> getExternalUnits() {
++		sortUnits();
++		return Collections.unmodifiableSet(externalUnits);
++	}
++}
+diff --git a/fedoraproject-p2/org.fedoraproject.p2/src/org/fedoraproject/p2/CompoundBundleRepository.java b/fedoraproject-p2/org.fedoraproject.p2/src/org/fedoraproject/p2/CompoundBundleRepository.java
+index b2fd31e..3a2dc88 100644
+--- a/fedoraproject-p2/org.fedoraproject.p2/src/org/fedoraproject/p2/CompoundBundleRepository.java
++++ b/fedoraproject-p2/org.fedoraproject.p2/src/org/fedoraproject/p2/CompoundBundleRepository.java
+@@ -1,5 +1,5 @@
+ /*******************************************************************************
+- * Copyright (c) 2014 Red Hat Inc.
++ * Copyright (c) 2014-2015 Red Hat Inc.
+  * All rights reserved. This program and the accompanying materials
+  * are made available under the terms of the Eclipse Public License v1.0
+  * which accompanies this distribution, and is available at
+@@ -10,25 +10,22 @@
+  *******************************************************************************/
+ package org.fedoraproject.p2;
+ 
++import java.nio.file.Path;
+ import java.util.ArrayList;
++import java.util.Collections;
+ import java.util.LinkedHashSet;
+ import java.util.List;
+ import java.util.Set;
+ 
+-import org.eclipse.equinox.p2.metadata.IInstallableUnit;
+-
+ /**
+  * A compound bundle repository which consists of one or more layered bundle
+  * repositories.
+  * 
+  * @author Mikolaj Izdebski
+  */
+-public class CompoundBundleRepository implements IFedoraBundleRepository {
++public class CompoundBundleRepository extends AbstractBundleRepository {
+ 
+-	private final List<IFedoraBundleRepository> indices;
+-	private Set<IInstallableUnit> platformUnits;
+-	private Set<IInstallableUnit> internalUnits;
+-	private Set<IInstallableUnit> externalUnits;
++	private final List<FedoraBundleRepository> indices;
+ 
+ 	/**
+ 	 * Create a compound repository backed by file system locations at given
+@@ -42,39 +39,31 @@ public class CompoundBundleRepository implements IFedoraBundleRepository {
+ 		for (SCL scl : scls) {
+ 			indices.add(new FedoraBundleRepository(scl));
+ 		}
+-	}
+ 
+-	@Override
+-	public synchronized Set<IInstallableUnit> getPlatformUnits() {
+-		if (platformUnits == null) {
+-			platformUnits = new LinkedHashSet<>();
+-			for (IFedoraBundleRepository index : indices) {
+-				platformUnits.addAll(index.getPlatformUnits());
+-			}
++		platformUnits = new LinkedHashSet<>();
++		for (IFedoraBundleRepository index : indices) {
++			platformUnits.addAll(index.getPlatformUnits());
+ 		}
+-		return platformUnits;
+-	}
+ 
+-	@Override
+-	public synchronized Set<IInstallableUnit> getInternalUnits() {
+-		if (internalUnits == null) {
+-			internalUnits = new LinkedHashSet<>();
+-			for (IFedoraBundleRepository index : indices) {
+-				internalUnits.addAll(index.getInternalUnits());
+-			}
++		internalUnits = new LinkedHashSet<>();
++		for (IFedoraBundleRepository index : indices) {
++			internalUnits.addAll(index.getInternalUnits());
++		}
++		internalUnits.removeAll(platformUnits);
++
++		externalUnits = new LinkedHashSet<>();
++		for (IFedoraBundleRepository index : indices) {
++			externalUnits.addAll(index.getExternalUnits());
+ 		}
+-		return internalUnits;
++		externalUnits.removeAll(platformUnits);
+ 	}
+ 
+ 	@Override
+-	public synchronized Set<IInstallableUnit> getExternalUnits() {
+-		if (externalUnits == null) {
+-			externalUnits = new LinkedHashSet<>();
+-			for (IFedoraBundleRepository index : indices) {
+-				externalUnits.addAll(index.getExternalUnits());
+-			}
++	public Set<Path> getDropinsLocations() {
++		Set<Path> dropinsLocations = new LinkedHashSet<>();
++		for (AbstractBundleRepository index : indices) {
++			dropinsLocations.addAll(index.getDropinsLocations());
+ 		}
+-		return externalUnits;
++		return Collections.unmodifiableSet(dropinsLocations);
+ 	}
+-
+ }
+diff --git a/fedoraproject-p2/org.fedoraproject.p2/src/org/fedoraproject/p2/FedoraBundleRepository.java b/fedoraproject-p2/org.fedoraproject.p2/src/org/fedoraproject/p2/FedoraBundleRepository.java
+index 4b4e8ec..a8deac2 100644
+--- a/fedoraproject-p2/org.fedoraproject.p2/src/org/fedoraproject/p2/FedoraBundleRepository.java
++++ b/fedoraproject-p2/org.fedoraproject.p2/src/org/fedoraproject/p2/FedoraBundleRepository.java
+@@ -1,5 +1,5 @@
+ /*******************************************************************************
+- * Copyright (c) 2014 Red Hat Inc.
++ * Copyright (c) 2014-2015 Red Hat Inc.
+  * All rights reserved. This program and the accompanying materials
+  * are made available under the terms of the Eclipse Public License v1.0
+  * which accompanies this distribution, and is available at
+@@ -10,7 +10,6 @@
+  *******************************************************************************/
+ package org.fedoraproject.p2;
+ 
+-import java.io.IOException;
+ import java.net.URI;
+ import java.nio.file.Path;
+ import java.util.Collections;
+@@ -34,20 +33,17 @@ import org.osgi.framework.ServiceReference;
+  * This acts as a front-end for all interactions/queries regarding the
+  * locations and metadata associated with system bundles (OSGi, Feature).
+  */
+-public class FedoraBundleRepository implements IFedoraBundleRepository {
++public class FedoraBundleRepository extends AbstractBundleRepository {
+ 
+-	private Set<IInstallableUnit> platformUnits;
+-	private Set<IInstallableUnit> internalUnits;
+-	private Set<IInstallableUnit> externalUnits;
+ 	private Map<Path, IMetadataRepository> metaRepos;
+ 	private Map<Path, FedoraBundleIndex> fbindices;
++	private Set<Path> dropinsLocations = new LinkedHashSet<>();
+ 
+ 	public FedoraBundleRepository(SCL scl) {
+ 		metaRepos = new LinkedHashMap<>();
+ 		fbindices = new LinkedHashMap<>();
+ 
+ 		Set<Path> platformLocations = new LinkedHashSet<>();
+-		Set<Path> dropinsLocations = new LinkedHashSet<>();
+ 		Set<Path> externalLocations = new LinkedHashSet<>();
+ 		EclipseSystemLayout.initLocations(scl, platformLocations, dropinsLocations, externalLocations, true);
+ 
+@@ -85,30 +81,8 @@ public class FedoraBundleRepository implements IFedoraBundleRepository {
+ 
+ 		externalUnits = enumerateUnits(externalLocations);
+ 		externalUnits.removeAll(platformUnits);
+-
+-		Set<IInstallableUnit> commonUnits = new LinkedHashSet<>(internalUnits);
+-		commonUnits.retainAll(externalUnits);
+-
+-		internalUnits.removeAll(commonUnits);
+-		externalUnits.removeAll(commonUnits);
+-
+-		for (IInstallableUnit unit : commonUnits) {
+-			try {
+-				Path path = P2Utils.getPath(unit);
+-				if (path == null)
+-					continue;
+-				path = path.toRealPath();
+-				for (Path dropin : dropinsLocations) {
+-					if (path.startsWith(dropin))
+-						internalUnits.add(unit);
+-					else
+-						externalUnits.add(unit);
+-				}
+-			} catch (IOException e) {
+-			}
+-		}
+ 	}
+-	
++
+ 	/**
+ 	 * @return A set of installable units reachable from given locations.
+ 	 */
+@@ -124,18 +98,7 @@ public class FedoraBundleRepository implements IFedoraBundleRepository {
+ 	}
+ 	
+ 	@Override
+-	public Set<IInstallableUnit> getPlatformUnits() {
+-		return Collections.unmodifiableSet(platformUnits);
++	public Set<Path> getDropinsLocations() {
++		return Collections.unmodifiableSet(dropinsLocations);
+ 	}
+-
+-	@Override
+-	public Set<IInstallableUnit> getInternalUnits() {
+-		return Collections.unmodifiableSet(internalUnits);
+-	}
+-
+-	@Override
+-	public Set<IInstallableUnit> getExternalUnits() {
+-		return Collections.unmodifiableSet(externalUnits);
+-	}
+-
+ }
+-- 
+2.1.0
+

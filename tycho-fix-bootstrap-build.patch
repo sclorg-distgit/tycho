@@ -1,0 +1,395 @@
+diff --git a/target-platform-configuration/pom.xml b/target-platform-configuration/pom.xml
+index 497b671..9570b2e 100644
+--- a/target-platform-configuration/pom.xml
++++ b/target-platform-configuration/pom.xml
+@@ -50,4 +50,30 @@
+ 			<version>${project.version}</version>
+ 		</dependency>
+ 	</dependencies>
++
++        <build>
++          <plugins>
++                  <plugin>
++                    <groupId>org.apache.maven.plugins</groupId>
++                    <artifactId>maven-plugin-plugin</artifactId>
++                    <version>3.3</version>
++                    <configuration>
++                      <skipErrorNoDescriptorsFound>true</skipErrorNoDescriptorsFound>
++                      <extractors>
++                        <extractor>java-annotations</extractor>
++                      </extractors>
++                    </configuration>
++                    <executions>
++                      <execution>
++                        <id>default-descriptor</id>
++                        <goals>
++                          <goal>descriptor</goal>
++                        </goals>
++                        <phase>process-classes</phase>
++                      </execution>
++                    </executions>
++                  </plugin>
++          </plugins>
++        </build>
++
+ </project>
+diff --git a/tycho-artifactcomparator/pom.xml b/tycho-artifactcomparator/pom.xml
+index 2b86d82..dfd2d5f 100644
+--- a/tycho-artifactcomparator/pom.xml
++++ b/tycho-artifactcomparator/pom.xml
+@@ -51,6 +51,15 @@
+       <plugin>
+         <groupId>org.codehaus.plexus</groupId>
+         <artifactId>plexus-component-metadata</artifactId>
++        <version>1.5.5</version>
++        <executions>
++          <execution>
++            <goals>
++              <goal>generate-metadata</goal>
++              <goal>generate-test-metadata</goal>
++            </goals>
++          </execution>
++        </executions>
+       </plugin>
+     </plugins>
+   </build>
+diff --git a/tycho-compiler-jdt/pom.xml b/tycho-compiler-jdt/pom.xml
+index f9a267a..fadb6df 100644
+--- a/tycho-compiler-jdt/pom.xml
++++ b/tycho-compiler-jdt/pom.xml
+@@ -25,10 +25,19 @@
+ 
+ 	<build>
+ 		<plugins>
+-			<plugin>
+-				<groupId>org.codehaus.plexus</groupId>
+-				<artifactId>plexus-component-metadata</artifactId>
+-			</plugin>
++                        <plugin>
++                          <groupId>org.codehaus.plexus</groupId>
++                          <artifactId>plexus-component-metadata</artifactId>
++                          <version>1.5.5</version>
++                          <executions>
++                            <execution>
++                              <goals>
++                                <goal>generate-metadata</goal>
++                                <goal>generate-test-metadata</goal>
++                              </goals>
++                            </execution>
++                          </executions>
++                        </plugin>
+ 		</plugins>
+ 	</build>
+ 
+diff --git a/tycho-compiler-plugin/pom.xml b/tycho-compiler-plugin/pom.xml
+index 6050e97..c763fd0 100644
+--- a/tycho-compiler-plugin/pom.xml
++++ b/tycho-compiler-plugin/pom.xml
+@@ -63,23 +63,35 @@
+ 		</dependency>
+ 
+ 		<dependency>
+-			<groupId>org.eclipse.tycho</groupId>
+-			<artifactId>tycho-testing-harness</artifactId>
+-			<version>${project.version}</version>
+-			<scope>test</scope>
+-		</dependency>
+-		<dependency>
+-			<groupId>org.eclipse.tycho</groupId>
+-			<artifactId>tycho-core</artifactId>
+-			<version>${project.version}</version>
+-			<scope>test</scope>
+-			<classifier>tests</classifier>
+-		</dependency>
+-		<dependency>
+ 			<groupId>bcel</groupId>
+ 			<artifactId>bcel</artifactId>
+ 			<scope>test</scope>
+ 		</dependency>
+ 	</dependencies>
+ 
++        <build>
++          <plugins>
++                  <plugin>
++                    <groupId>org.apache.maven.plugins</groupId>
++                    <artifactId>maven-plugin-plugin</artifactId>
++                    <version>3.3</version>
++                    <configuration>
++                      <skipErrorNoDescriptorsFound>true</skipErrorNoDescriptorsFound>
++                      <extractors>
++                        <extractor>java-annotations</extractor>
++                      </extractors>
++                    </configuration>
++                    <executions>
++                      <execution>
++                        <id>default-descriptor</id>
++                        <goals>
++                          <goal>descriptor</goal>
++                        </goals>
++                        <phase>process-classes</phase>
++                      </execution>
++                    </executions>
++                  </plugin>
++          </plugins>
++        </build>
++
+ </project>
+diff --git a/tycho-core/pom.xml b/tycho-core/pom.xml
+index f565826..abef39f 100644
+--- a/tycho-core/pom.xml
++++ b/tycho-core/pom.xml
+@@ -59,11 +59,19 @@
+ 			</testResource>
+ 		</testResources>
+ 		<plugins>
+-			<plugin>
+-				<groupId>org.codehaus.plexus</groupId>
+-				<artifactId>plexus-component-metadata</artifactId>
+-			</plugin>
+-
++                        <plugin>
++                          <groupId>org.codehaus.plexus</groupId>
++                          <artifactId>plexus-component-metadata</artifactId>
++                          <version>1.5.5</version>
++                          <executions>
++                            <execution>
++                              <goals>
++                                <goal>generate-metadata</goal>
++                                <goal>generate-test-metadata</goal>
++                              </goals>
++                            </execution>
++                          </executions>
++                        </plugin>
+ 			<plugin>
+ 				<groupId>org.apache.felix</groupId>
+ 				<artifactId>maven-bundle-plugin</artifactId>
+@@ -148,12 +156,6 @@
+ 		</dependency>
+ 
+ 		<dependency>
+-			<groupId>org.eclipse.tycho</groupId>
+-			<artifactId>tycho-testing-harness</artifactId>
+-			<version>${project.version}</version>
+-			<scope>test</scope>
+-		</dependency>
+-		<dependency>
+ 			<groupId>org.apache.maven</groupId>
+ 			<artifactId>maven-compat</artifactId>
+ 			<scope>test</scope>
+diff --git a/tycho-maven-plugin/src/main/resources/META-INF/plexus/components.xml b/tycho-maven-plugin/src/main/resources/META-INF/plexus/components.xml
+index c3cb13c..a2e44d2 100644
+--- a/tycho-maven-plugin/src/main/resources/META-INF/plexus/components.xml
++++ b/tycho-maven-plugin/src/main/resources/META-INF/plexus/components.xml
+@@ -94,9 +94,6 @@
+                 org.eclipse.tycho:tycho-packaging-plugin:${project.version}:package-plugin,
+                 org.eclipse.tycho:tycho-p2-plugin:${project.version}:p2-metadata-default
+               </package>
+-              <integration-test>
+-                org.eclipse.tycho:tycho-surefire-plugin:${project.version}:test
+-              </integration-test>
+               <install>
+                 org.apache.maven.plugins:maven-install-plugin:${install-plugin.version}:install,
+                 org.eclipse.tycho:tycho-p2-plugin:${project.version}:update-local-index
+diff --git a/tycho-p2/tycho-p2-plugin/pom.xml b/tycho-p2/tycho-p2-plugin/pom.xml
+index a6a3bcd..d344076 100644
+--- a/tycho-p2/tycho-p2-plugin/pom.xml
++++ b/tycho-p2/tycho-p2-plugin/pom.xml
+@@ -53,21 +53,43 @@
+             <artifactId>tycho-artifactcomparator</artifactId>
+             <version>${project.version}</version>
+         </dependency>
+-
+-		<dependency>
+-			<groupId>org.eclipse.tycho</groupId>
+-			<artifactId>tycho-testing-harness</artifactId>
+-			<version>${project.version}</version>
+-			<scope>test</scope>
+-		</dependency>
+ 	</dependencies>
+ 
+     <build>
+         <plugins>
+-            <plugin>
+-                <groupId>org.codehaus.plexus</groupId>
+-                <artifactId>plexus-component-metadata</artifactId>
+-            </plugin>
++          <plugin>
++            <groupId>org.codehaus.plexus</groupId>
++            <artifactId>plexus-component-metadata</artifactId>
++            <version>1.5.5</version>
++            <executions>
++             <execution>
++                <goals>
++                  <goal>generate-metadata</goal>
++                  <goal>generate-test-metadata</goal>
++               </goals>
++              </execution>
++            </executions>
++          </plugin>
++          <plugin>
++            <groupId>org.apache.maven.plugins</groupId>
++            <artifactId>maven-plugin-plugin</artifactId>
++            <version>3.3</version>
++            <configuration>
++              <skipErrorNoDescriptorsFound>true</skipErrorNoDescriptorsFound>
++              <extractors>
++                <extractor>java-annotations</extractor>
++              </extractors>
++            </configuration>
++            <executions>
++              <execution>
++                <id>default-descriptor</id>
++                <goals>
++                  <goal>descriptor</goal>
++                </goals>
++                <phase>process-classes</phase>
++              </execution>
++            </executions>
++          </plugin>
+         </plugins>
+     </build>
+ 
+diff --git a/tycho-p2/tycho-p2-publisher-plugin/pom.xml b/tycho-p2/tycho-p2-publisher-plugin/pom.xml
+index 454b8c2..9854dbb 100644
+--- a/tycho-p2/tycho-p2-publisher-plugin/pom.xml
++++ b/tycho-p2/tycho-p2-publisher-plugin/pom.xml
+@@ -48,12 +48,31 @@
+ 			<artifactId>tycho-packaging-plugin</artifactId>
+ 			<version>${project.version}</version>
+ 		</dependency>
+-		<dependency>
+-			<groupId>org.eclipse.tycho</groupId>
+-			<artifactId>tycho-testing-harness</artifactId>
+-			<version>${project.version}</version>
+-			<scope>test</scope>
+-		</dependency>
+ 	</dependencies>
+ 
++        <build>
++          <plugins>
++                  <plugin>
++                    <groupId>org.apache.maven.plugins</groupId>
++                    <artifactId>maven-plugin-plugin</artifactId>
++                    <version>3.3</version>
++                    <configuration>
++                      <skipErrorNoDescriptorsFound>true</skipErrorNoDescriptorsFound>
++                      <extractors>
++                        <extractor>java-annotations</extractor>
++                      </extractors>
++                    </configuration>
++                    <executions>
++                      <execution>
++                        <id>default-descriptor</id>
++                        <goals>
++                          <goal>descriptor</goal>
++                        </goals>
++                        <phase>process-classes</phase>
++                      </execution>
++                    </executions>
++                  </plugin>
++          </plugins>
++        </build>
++
+ </project>
+diff --git a/tycho-p2/tycho-p2-repository-plugin/pom.xml b/tycho-p2/tycho-p2-repository-plugin/pom.xml
+index e8d5117..af7d657 100644
+--- a/tycho-p2/tycho-p2-repository-plugin/pom.xml
++++ b/tycho-p2/tycho-p2-repository-plugin/pom.xml
+@@ -42,4 +42,29 @@
+ 		</dependency>
+ 	</dependencies>
+ 
++        <build>
++          <plugins>
++                  <plugin>
++                    <groupId>org.apache.maven.plugins</groupId>
++                    <artifactId>maven-plugin-plugin</artifactId>
++                    <version>3.3</version>
++                    <configuration>
++                      <skipErrorNoDescriptorsFound>true</skipErrorNoDescriptorsFound>
++                      <extractors>
++                        <extractor>java-annotations</extractor>
++                      </extractors>
++                    </configuration>
++                    <executions>
++                      <execution>
++                        <id>default-descriptor</id>
++                        <goals>
++                          <goal>descriptor</goal>
++                        </goals>
++                        <phase>process-classes</phase>
++                      </execution>
++                    </executions>
++                  </plugin>
++          </plugins>
++        </build>
++
+ </project>
+diff --git a/tycho-packaging-plugin/pom.xml b/tycho-packaging-plugin/pom.xml
+index b842cbf..962494c 100644
+--- a/tycho-packaging-plugin/pom.xml
++++ b/tycho-packaging-plugin/pom.xml
+@@ -33,19 +33,6 @@
+ 			<version>${project.version}</version>
+ 		</dependency>
+ 		<dependency>
+-			<groupId>org.eclipse.tycho</groupId>
+-			<artifactId>tycho-testing-harness</artifactId>
+-			<version>${project.version}</version>
+-			<scope>test</scope>
+-		</dependency>
+-		<dependency>
+-			<groupId>org.eclipse.tycho</groupId>
+-			<artifactId>tycho-core</artifactId>
+-			<version>${project.version}</version>
+-			<scope>test</scope>
+-			<classifier>tests</classifier>
+-		</dependency>
+-		<dependency>
+ 			<groupId>org.apache.maven</groupId>
+ 			<artifactId>maven-compat</artifactId>
+ 			<scope>test</scope>
+@@ -78,10 +65,39 @@
+ 
+ 	<build>
+ 		<plugins>
+-			<plugin>
+-				<groupId>org.codehaus.plexus</groupId>
+-				<artifactId>plexus-component-metadata</artifactId>
+-			</plugin>
++		  <plugin>
++		    <groupId>org.codehaus.plexus</groupId>
++		    <artifactId>plexus-component-metadata</artifactId>
++                    <version>1.5.5</version>
++                    <executions>
++		      <execution>
++			<goals>
++			  <goal>generate-metadata</goal>
++			  <goal>generate-test-metadata</goal>
++			</goals>
++		      </execution>
++                    </executions>
++                  </plugin>
++                  <plugin>
++                    <groupId>org.apache.maven.plugins</groupId>
++                    <artifactId>maven-plugin-plugin</artifactId>
++                    <version>3.3</version>
++                    <configuration>
++                      <skipErrorNoDescriptorsFound>true</skipErrorNoDescriptorsFound>
++                      <extractors>
++                        <extractor>java-annotations</extractor>
++                      </extractors>
++                    </configuration>
++                    <executions>
++                      <execution>
++                        <id>default-descriptor</id>
++                        <goals>
++                          <goal>descriptor</goal>
++                        </goals>
++                        <phase>process-classes</phase>
++                      </execution>
++                    </executions>
++                  </plugin>
+ 		</plugins>
+ 	</build>
+ </project>

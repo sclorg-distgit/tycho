@@ -1,0 +1,283 @@
+From 9c539031154842d0b207219a1dc91060d78fa148 Mon Sep 17 00:00:00 2001
+From: Roland Grunberg <rgrunber@redhat.com>
+Date: Fri, 19 Dec 2014 14:58:53 -0500
+Subject: [PATCH] Port to Maven 3.0.5
+
+Porting to Maven 3.0.5 also means migrating to some other libraries
+and technologies which are used by Maven:
+
+    Eclipse Sisu Inject -> Sonatype Sisu Plexus
+    JSR-330 -> Plexus Component Annotations
+---
+ xmvn-p2-installer-plugin/pom.xml                   | 27 +++++++++++++++----
+ .../org/fedoraproject/p2/app/P2InstallerApp.java   | 30 ++++++----------------
+ .../p2/osgi/impl/DefaultOSGiConfigurator.java      | 16 ++++--------
+ .../p2/osgi/impl/DefaultOSGiFramework.java         | 16 ++++--------
+ .../p2/osgi/impl/DefaultOSGiServiceLocator.java    | 16 ++++--------
+ .../p2/xmvn/EclipseArtifactInstaller.java          | 10 +++-----
+ 6 files changed, 49 insertions(+), 66 deletions(-)
+
+diff --git a/fedoraproject-p2/xmvn-p2-installer-plugin/pom.xml b/fedoraproject-p2/xmvn-p2-installer-plugin/pom.xml
+index dd6b23d..4541011 100644
+--- a/fedoraproject-p2/xmvn-p2-installer-plugin/pom.xml
++++ b/fedoraproject-p2/xmvn-p2-installer-plugin/pom.xml
+@@ -45,13 +45,12 @@
+       <version>${project.version}</version>
+     </dependency>
+     <dependency>
+-      <groupId>javax.inject</groupId>
+-      <artifactId>javax.inject</artifactId>
+-      <scope>provided</scope>
++      <groupId>org.codehaus.plexus</groupId>
++      <artifactId>plexus-component-annotations</artifactId>
+     </dependency>
+     <dependency>
+-      <groupId>org.eclipse.sisu</groupId>
+-      <artifactId>org.eclipse.sisu.inject</artifactId>
++      <groupId>org.sonatype.sisu</groupId>
++      <artifactId>sisu-inject-plexus</artifactId>
+     </dependency>
+     <dependency>
+       <groupId>org.sonatype.sisu</groupId>
+@@ -68,6 +67,10 @@
+     </dependency>
+     <dependency>
+       <groupId>org.slf4j</groupId>
++      <artifactId>slf4j-api</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>org.slf4j</groupId>
+       <artifactId>slf4j-simple</artifactId>
+     </dependency>
+     <dependency>
+@@ -101,5 +104,19 @@
+         </plugin>
+       </plugins>
+     </pluginManagement>
++    <plugins>
++      <plugin>
++        <groupId>org.codehaus.plexus</groupId>
++        <artifactId>plexus-component-metadata</artifactId>
++        <executions>
++          <execution>
++            <goals>
++              <goal>generate-metadata</goal>
++              <goal>generate-test-metadata</goal>
++            </goals>
++          </execution>
++        </executions>
++      </plugin>
++    </plugins>
+   </build>
+ </project>
+diff --git a/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/app/P2InstallerApp.java b/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/app/P2InstallerApp.java
+index ade09a9..ccca80e 100644
+--- a/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/app/P2InstallerApp.java
++++ b/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/app/P2InstallerApp.java
+@@ -14,16 +14,10 @@ import java.nio.file.Paths;
+ import java.util.Map.Entry;
+ import java.util.Set;
+ 
+-import javax.inject.Inject;
+-import com.google.inject.Injector;
+-import org.eclipse.sisu.space.ClassSpace;
+-import com.google.inject.Module;
+-import javax.inject.Singleton;
+-import javax.inject.Named;
+-import com.google.inject.Guice;
+-import org.eclipse.sisu.space.SpaceModule;
+-import org.eclipse.sisu.space.URLClassSpace;
+-import org.eclipse.sisu.wire.WireModule;
++import org.codehaus.plexus.DefaultPlexusContainer;
++import org.codehaus.plexus.PlexusContainer;
++import org.codehaus.plexus.component.annotations.Component;
++import org.codehaus.plexus.component.annotations.Requirement;
+ 
+ import org.fedoraproject.p2.installer.Dropin;
+ import org.fedoraproject.p2.installer.EclipseInstallationRequest;
+@@ -35,17 +29,12 @@ import org.fedoraproject.p2.osgi.OSGiServiceLocator;
+ /**
+  * @author Mikolaj Izdebski
+  */
+-@Named
+-@Singleton
++@Component( role = P2InstallerApp.class )
+ public class P2InstallerApp {
+ 
++	@Requirement
+ 	private OSGiServiceLocator serviceLocator;
+ 
+-	@Inject
+-	public P2InstallerApp(OSGiServiceLocator serviceLocator) {
+-		this.serviceLocator = serviceLocator;
+-	}
+-
+ 	public int run(CliRequest cliRequest) throws Exception {
+ 		if (cliRequest.getParameters().isEmpty()) {
+ 			System.err.println("No artifacts specified for installation."
+@@ -94,11 +83,8 @@ public class P2InstallerApp {
+ 		try {
+ 			CliRequest cliRequest = new CliRequest(args);
+ 
+-			ClassLoader realm = Thread.currentThread().getContextClassLoader();
+-			ClassSpace classSpace = new URLClassSpace(realm);
+-			Module module = new WireModule(new SpaceModule(classSpace));
+-			Injector injector = Guice.createInjector(module);
+-			P2InstallerApp app = injector.getInstance(P2InstallerApp.class);
++			PlexusContainer container = new DefaultPlexusContainer();
++			P2InstallerApp app = container.lookup( P2InstallerApp.class );
+ 
+ 			System.exit(app.run(cliRequest));
+ 		} catch (Throwable e) {
+diff --git a/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/osgi/impl/DefaultOSGiConfigurator.java b/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/osgi/impl/DefaultOSGiConfigurator.java
+index 8acb598..a642a65 100644
+--- a/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/osgi/impl/DefaultOSGiConfigurator.java
++++ b/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/osgi/impl/DefaultOSGiConfigurator.java
+@@ -21,9 +21,8 @@ import java.util.Collections;
+ import java.util.LinkedHashSet;
+ import java.util.Set;
+ 
+-import javax.inject.Inject;
+-import javax.inject.Named;
+-import javax.inject.Singleton;
++import org.codehaus.plexus.component.annotations.Component;
++import org.codehaus.plexus.component.annotations.Requirement;
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+@@ -37,8 +36,7 @@ import org.fedoraproject.p2.osgi.OSGiConfigurator;
+ /**
+  * @author Mikolaj Izdebski
+  */
+-@Named
+-@Singleton
++@Component( role = OSGiConfigurator.class )
+ public class DefaultOSGiConfigurator implements OSGiConfigurator {
+ 	private final Logger logger = LoggerFactory
+ 			.getLogger(DefaultOSGiConfigurator.class);
+@@ -47,12 +45,8 @@ public class DefaultOSGiConfigurator implements OSGiConfigurator {
+ 			"org.eclipse.tycho", "tycho-bundles-external", "txt", "manifest",
+ 			"SYSTEM");
+ 
+-	private final Resolver resolver;
+-
+-	@Inject
+-	public DefaultOSGiConfigurator(Resolver resolver) {
+-		this.resolver = resolver;
+-	}
++	@Requirement
++	private Resolver resolver;
+ 
+ 	@Override
+ 	public Collection<Path> getBundles() {
+diff --git a/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/osgi/impl/DefaultOSGiFramework.java b/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/osgi/impl/DefaultOSGiFramework.java
+index 56b1875..ccc995a 100644
+--- a/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/osgi/impl/DefaultOSGiFramework.java
++++ b/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/osgi/impl/DefaultOSGiFramework.java
+@@ -14,9 +14,8 @@ import java.util.LinkedHashMap;
+ import java.util.Map;
+ 
+ import com.google.common.base.Joiner;
+-import javax.inject.Inject;
+-import javax.inject.Named;
+-import javax.inject.Singleton;
++import org.codehaus.plexus.component.annotations.Component;
++import org.codehaus.plexus.component.annotations.Requirement;
+ import org.eclipse.core.runtime.adaptor.EclipseStarter;
+ import org.osgi.framework.Bundle;
+ import org.osgi.framework.BundleContext;
+@@ -30,21 +29,16 @@ import org.fedoraproject.p2.osgi.OSGiFramework;
+ /**
+  * @author Mikolaj Izdebski
+  */
+-@Named
+-@Singleton
++@Component( role = OSGiFramework.class )
+ public class DefaultOSGiFramework implements OSGiFramework {
+ 	private final Logger logger = LoggerFactory
+ 			.getLogger(DefaultOSGiFramework.class);
+ 
+-	private final OSGiConfigurator equinoxLocator;
++	@Requirement
++	private OSGiConfigurator equinoxLocator;
+ 
+ 	private BundleContext bundleContext;
+ 
+-	@Inject
+-	public DefaultOSGiFramework(OSGiConfigurator equinoxLocator) {
+-		this.equinoxLocator = equinoxLocator;
+-	}
+-
+ 	private BundleContext launchEquinox() throws Exception {
+ 		Map<String, String> properties = new LinkedHashMap<>();
+ 
+diff --git a/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/osgi/impl/DefaultOSGiServiceLocator.java b/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/osgi/impl/DefaultOSGiServiceLocator.java
+index 3274381..9fcbf49 100644
+--- a/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/osgi/impl/DefaultOSGiServiceLocator.java
++++ b/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/osgi/impl/DefaultOSGiServiceLocator.java
+@@ -10,9 +10,8 @@
+  *******************************************************************************/
+ package org.fedoraproject.p2.osgi.impl;
+ 
+-import javax.inject.Inject;
+-import javax.inject.Named;
+-import javax.inject.Singleton;
++import org.codehaus.plexus.component.annotations.Component;
++import org.codehaus.plexus.component.annotations.Requirement;
+ import org.osgi.framework.BundleContext;
+ import org.osgi.framework.ServiceReference;
+ 
+@@ -22,15 +21,10 @@ import org.fedoraproject.p2.osgi.OSGiServiceLocator;
+ /**
+  * @author Mikolaj Izdebski
+  */
+-@Named
+-@Singleton
++@Component( role = OSGiServiceLocator.class )
+ public class DefaultOSGiServiceLocator implements OSGiServiceLocator {
+-	private final OSGiFramework framework;
+-
+-	@Inject
+-	public DefaultOSGiServiceLocator(OSGiFramework framework) {
+-		this.framework = framework;
+-	}
++	@Requirement
++	private OSGiFramework framework;
+ 
+ 	@Override
+ 	public <T> T getService(Class<T> clazz) {
+diff --git a/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/xmvn/EclipseArtifactInstaller.java b/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/xmvn/EclipseArtifactInstaller.java
+index 216c524..33c93b4 100644
+--- a/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/xmvn/EclipseArtifactInstaller.java
++++ b/fedoraproject-p2/xmvn-p2-installer-plugin/src/main/java/org/fedoraproject/p2/xmvn/EclipseArtifactInstaller.java
+@@ -17,9 +17,8 @@ import java.nio.file.Paths;
+ import java.util.LinkedHashMap;
+ import java.util.Map;
+ 
+-import javax.inject.Inject;
+-import javax.inject.Named;
+-import javax.inject.Singleton;
++import org.codehaus.plexus.component.annotations.Component;
++import org.codehaus.plexus.component.annotations.Requirement;
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+@@ -42,13 +41,12 @@ import org.fedoraproject.p2.installer.EclipseInstaller;
+ import org.fedoraproject.p2.installer.Provide;
+ import org.fedoraproject.p2.osgi.OSGiServiceLocator;
+ 
+-@Named("eclipse")
+-@Singleton
++@Component( role = ArtifactInstaller.class, hint = "eclipse" )
+ public class EclipseArtifactInstaller implements ArtifactInstaller {
+ 	private final Logger logger = LoggerFactory
+ 			.getLogger(EclipseArtifactInstaller.class);
+ 
+-	@Inject
++	@Requirement
+ 	private OSGiServiceLocator equinox;
+ 
+ 	private final EclipseInstallationRequest request = new EclipseInstallationRequest();
+-- 
+1.9.3
+
