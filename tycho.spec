@@ -2,7 +2,7 @@
 %{!?scl:%global pkg_name %{name}}
 %{?java_common_find_provides_and_requires}
 
-%global baserelease 2
+%global baserelease 3
 
 # Bootstrap build
 # Tycho depends on itself, and Eclipse to build but in certain cases
@@ -119,6 +119,7 @@ BuildRequires:  %{?scl_prefix_java_common}jetty-servlet
 BuildRequires:  %{?scl_prefix_maven}maven-shared-utils
 BuildRequires:  %{?scl_prefix}mockito
 BuildRequires:  %{?scl_prefix}glassfish-servlet-api
+BuildRequires:  zip
 
 Requires:       %{?scl_prefix_maven}apache-commons-exec
 Requires:       %{?scl_prefix}decentxml
@@ -474,6 +475,9 @@ ln -s %{_javadir}/tycho/org.fedoraproject.p2.jar %{buildroot}%{?_scl_prefix}%{?s
 %{_javadocdir}/tycho
 
 %changelog
+* Wed Jul 27 2016 Mat Booth <mat.booth@redhat.com> - 0.25.0-7.3
+- Add missing BR on zip for EL6
+
 * Mon Jul 25 2016 Mat Booth <mat.booth@redhat.com> - 0.25.0-7.2
 - Perform bootstrap build
 - Drop patch for porting to plexus/maven-archiver 3.0.1
