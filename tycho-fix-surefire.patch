@@ -1,0 +1,203 @@
+From d4d161e7ccfb21503e906229a37000eb9a821284 Mon Sep 17 00:00:00 2001
+From: Jan Sievers <jan.sievers@sap.com>
+Date: Tue, 4 Sep 2012 16:02:52 +0200
+Subject: [PATCH] Resolve all necessary dependencies for Tycho Surefire.
+
+When running an Eclipse bundle's tests, Tycho Surefire resolves its
+runtime dependencies using a class loader, which is in fact just looking
+through Bundle-ClassPath. As a result, it must copy over and include
+system jars in its Bundle-ClassPath. We use Fedora system jars to
+satisfy these dependencies but even these jars differ slightly in terms
+of provided classes. This patch addresses this issue.
+
+Basically, the jars added to the Bundle-ClassPath in this patch, provide
+the additional classes that are in the original jars used upstream.
+
+Change-Id: I9ef0239eed887fa47c380efcdce968934c788c9f
+---
+ pom.xml                                            |  2 +-
+ .../META-INF/MANIFEST.MF                           |  5 ++--
+ .../org.eclipse.tycho.surefire.junit/pom.xml       |  5 ++++
+ .../META-INF/MANIFEST.MF                           |  5 +++-
+ .../org.eclipse.tycho.surefire.junit4/pom.xml      | 10 ++++++++
+ .../META-INF/MANIFEST.MF                           |  8 ++++---
+ .../org.eclipse.tycho.surefire.junit47/pom.xml     | 10 ++++++++
+ .../META-INF/MANIFEST.MF                           |  7 +++---
+ .../org.eclipse.tycho.surefire.osgibooter/pom.xml  |  5 ++++
+ .../surefire/osgibooter/OsgiSurefireBooter.java    | 20 ++++++++++------
+ tycho-surefire/pom.xml                             |  2 +-
+ .../java/org/eclipse/tycho/surefire/TestMojo.java  | 27 +++++++++++++++++++---
+ 12 files changed, 85 insertions(+), 21 deletions(-)
+
+diff --git a/pom.xml b/pom.xml
+index c43cc8d..6e5fde4 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -380,7 +380,7 @@
+ 				<plugin>
+ 					<groupId>org.apache.maven.plugins</groupId>
+ 					<artifactId>maven-surefire-plugin</artifactId>
+-					<version>2.17</version>
++					<version>2.19.1</version>
+ 				</plugin>
+ 				<plugin>
+ 					<groupId>org.apache.maven.plugins</groupId>
+diff --git a/tycho-surefire/org.eclipse.tycho.surefire.junit/META-INF/MANIFEST.MF b/tycho-surefire/org.eclipse.tycho.surefire.junit/META-INF/MANIFEST.MF
+index da31140..fb5803f 100644
+--- a/tycho-surefire/org.eclipse.tycho.surefire.junit/META-INF/MANIFEST.MF
++++ b/tycho-surefire/org.eclipse.tycho.surefire.junit/META-INF/MANIFEST.MF
+@@ -6,6 +6,7 @@ Bundle-Version: 0.23.0
+ Fragment-Host: org.eclipse.tycho.surefire.osgibooter;bundle-version="0.14.0"
+ Bundle-RequiredExecutionEnvironment: J2SE-1.5,
+  JavaSE-1.6
+-Require-Bundle: org.junit;bundle-version="[3.8.0,4.0.0)"
+-Bundle-ClassPath: jars/surefire-junit3-2.17.jar
++Require-Bundle: org.junit;bundle-version="[3.8.0,5.0.0)"
++Bundle-ClassPath: jars/surefire-junit3-2.19.1.jar,
++ jars/common-junit3-2.19.1.jar
+ Bundle-Vendor: %providerName
+diff --git a/tycho-surefire/org.eclipse.tycho.surefire.junit/pom.xml b/tycho-surefire/org.eclipse.tycho.surefire.junit/pom.xml
+index f99c319..0224cc6 100644
+--- a/tycho-surefire/org.eclipse.tycho.surefire.junit/pom.xml
++++ b/tycho-surefire/org.eclipse.tycho.surefire.junit/pom.xml
+@@ -44,6 +44,11 @@
+ 									<artifactId>surefire-junit3</artifactId>
+ 									<version>${surefire-version}</version>
+ 								</artifactItem>
++								<artifactItem>
++									<groupId>org.apache.maven.surefire</groupId>
++									<artifactId>common-junit3</artifactId>
++									<version>${surefire-version}</version>
++								</artifactItem>
+ 							</artifactItems>
+ 						</configuration>
+ 					</execution>
+diff --git a/tycho-surefire/org.eclipse.tycho.surefire.junit4/META-INF/MANIFEST.MF b/tycho-surefire/org.eclipse.tycho.surefire.junit4/META-INF/MANIFEST.MF
+index 50be5ea..97760e2 100644
+--- a/tycho-surefire/org.eclipse.tycho.surefire.junit4/META-INF/MANIFEST.MF
++++ b/tycho-surefire/org.eclipse.tycho.surefire.junit4/META-INF/MANIFEST.MF
+@@ -6,9 +6,12 @@ Bundle-Version: 0.23.0
+ Fragment-Host: org.eclipse.tycho.surefire.osgibooter;bundle-version="0.14.0"
+ Bundle-RequiredExecutionEnvironment: J2SE-1.5,
+  JavaSE-1.6
+-Bundle-ClassPath: jars/surefire-junit4-2.17.jar
++Bundle-ClassPath: jars/surefire-junit4-2.19.1.jar,
++ jars/common-junit3-2.19.1.jar,
++ jars/common-junit4-2.19.1.jar
+ Import-Package: junit.framework;version="3.0.0",
+  org.junit;version="4.0.0",
+  org.junit.runner;version="4.0.0",
++ org.junit.runner.manipulation;version="4.0.0",
+  org.junit.runner.notification;version="4.0.0"
+ Bundle-Vendor: %providerName
+diff --git a/tycho-surefire/org.eclipse.tycho.surefire.junit4/pom.xml b/tycho-surefire/org.eclipse.tycho.surefire.junit4/pom.xml
+index 9628b06..2a09e91 100644
+--- a/tycho-surefire/org.eclipse.tycho.surefire.junit4/pom.xml
++++ b/tycho-surefire/org.eclipse.tycho.surefire.junit4/pom.xml
+@@ -44,6 +44,16 @@
+ 									<artifactId>surefire-junit4</artifactId>
+ 									<version>${surefire-version}</version>
+ 								</artifactItem>
++								<artifactItem>
++									<groupId>org.apache.maven.surefire</groupId>
++									<artifactId>common-junit3</artifactId>
++									<version>${surefire-version}</version>
++									</artifactItem>
++								<artifactItem>
++									<groupId>org.apache.maven.surefire</groupId>
++									<artifactId>common-junit4</artifactId>
++									<version>${surefire-version}</version>
++								</artifactItem>
+ 							</artifactItems>
+ 						</configuration>
+ 					</execution>
+diff --git a/tycho-surefire/org.eclipse.tycho.surefire.junit47/META-INF/MANIFEST.MF b/tycho-surefire/org.eclipse.tycho.surefire.junit47/META-INF/MANIFEST.MF
+index 595265b..1ac6c5d 100644
+--- a/tycho-surefire/org.eclipse.tycho.surefire.junit47/META-INF/MANIFEST.MF
++++ b/tycho-surefire/org.eclipse.tycho.surefire.junit47/META-INF/MANIFEST.MF
+@@ -6,9 +6,11 @@ Bundle-Version: 0.23.0
+ Fragment-Host: org.eclipse.tycho.surefire.osgibooter;bundle-version="0.16.0"
+ Bundle-RequiredExecutionEnvironment: J2SE-1.5
+ Bundle-ClassPath: .,
+- jars/surefire-junit47-2.17.jar,
+- jars/common-junit48-2.17.jar,
+- jars/surefire-grouper-2.17.jar
++ jars/surefire-junit47-2.19.1.jar,
++ jars/common-junit48-2.19.1.jar,
++ jars/surefire-grouper-2.19.1.jar,
++ jars/common-junit3-2.19.1.jar,
++ jars/common-junit4-2.19.1.jar
+ Import-Package: junit.framework;version="3.0.0",
+  org.junit;version="[4.7,5)",
+  org.junit.runner;version="[4.7,5)",
+diff --git a/tycho-surefire/org.eclipse.tycho.surefire.junit47/pom.xml b/tycho-surefire/org.eclipse.tycho.surefire.junit47/pom.xml
+index dc49a46..db453ac 100644
+--- a/tycho-surefire/org.eclipse.tycho.surefire.junit47/pom.xml
++++ b/tycho-surefire/org.eclipse.tycho.surefire.junit47/pom.xml
+@@ -54,6 +54,16 @@
+ 									<artifactId>surefire-grouper</artifactId>
+ 									<version>${surefire-version}</version>
+ 								</artifactItem>
++								<artifactItem>
++									<groupId>org.apache.maven.surefire</groupId>
++									<artifactId>common-junit4</artifactId>
++									<version>${surefire-version}</version>
++								</artifactItem>
++								<artifactItem>
++									<groupId>org.apache.maven.surefire</groupId>
++									<artifactId>common-junit3</artifactId>
++									<version>${surefire-version}</version>
++								</artifactItem>
+ 							</artifactItems>
+ 						</configuration>
+ 					</execution>
+diff --git a/tycho-surefire/org.eclipse.tycho.surefire.osgibooter/META-INF/MANIFEST.MF b/tycho-surefire/org.eclipse.tycho.surefire.osgibooter/META-INF/MANIFEST.MF
+index 991edc1..83732d5 100644
+--- a/tycho-surefire/org.eclipse.tycho.surefire.osgibooter/META-INF/MANIFEST.MF
++++ b/tycho-surefire/org.eclipse.tycho.surefire.osgibooter/META-INF/MANIFEST.MF
+@@ -5,9 +5,10 @@ Require-Bundle: org.eclipse.osgi;bundle-version="3.2.2",
+ Eclipse-AutoStart: true
+ Bundle-Version: 0.25.0
+ Bundle-ClassPath: .,
+- jars/surefire-booter-2.17.jar,
+- jars/surefire-api-2.17.jar,
+- jars/maven-surefire-common-2.17.jar
++ jars/surefire-booter-2.19.1.jar,
++ jars/surefire-api-2.19.1.jar,
++ jars/maven-surefire-common-2.19.1.jar,
++ jars/plexus-utils-3.0.jar
+ Bundle-Name: Tycho Surefire OSGi Booter Eclipse Application (Incubation)
+ Bundle-ManifestVersion: 2
+ Bundle-SymbolicName: org.eclipse.tycho.surefire.osgibooter;singleton:=true
+diff --git a/tycho-surefire/org.eclipse.tycho.surefire.osgibooter/pom.xml b/tycho-surefire/org.eclipse.tycho.surefire.osgibooter/pom.xml
+index 82700eb..3fbc3a3 100644
+--- a/tycho-surefire/org.eclipse.tycho.surefire.osgibooter/pom.xml
++++ b/tycho-surefire/org.eclipse.tycho.surefire.osgibooter/pom.xml
+@@ -57,6 +57,11 @@
+ 									<artifactId>maven-surefire-common</artifactId>
+ 									<version>${surefire-version}</version>
+ 								</artifactItem>
++								<artifactItem>
++									<groupId>org.codehaus.plexus</groupId>
++									<artifactId>plexus-utils</artifactId>
++									<version>3.0</version>
++								</artifactItem>
+ 							</artifactItems>
+ 						</configuration>
+ 					</execution>
+diff --git a/tycho-surefire/pom.xml b/tycho-surefire/pom.xml
+index cb2b826..bbe5f29 100644
+--- a/tycho-surefire/pom.xml
++++ b/tycho-surefire/pom.xml
+@@ -26,7 +26,7 @@
+ 	<name>Tycho Surefire Parent (Incubation)</name>
+ 
+ 	<properties>
+-		<surefire-version>2.17</surefire-version>
++		<surefire-version>2.19.1</surefire-version>
+ 		<!-- NOTE: when updating surefire version above, run BND manually to find Import-Package 
+ 		statements to JUnit packages required for org.eclipse.tycho.surefire.junit* OSGi wrappers.
+ 		Surefire jars are shaded but not fully self-contained (various package dependencies to org.apache.maven.* 
+-- 
+2.4.3
+
