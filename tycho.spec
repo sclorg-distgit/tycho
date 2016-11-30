@@ -2,7 +2,7 @@
 %{!?scl:%global pkg_name %{name}}
 %{?java_common_find_provides_and_requires}
 
-%global baserelease 4
+%global baserelease 5
 
 # Bootstrap build
 # Tycho depends on itself, and Eclipse to build but in certain cases
@@ -12,11 +12,11 @@
 # This basically uses javac + xmvn to build only the Tycho components
 # required to perform a full Tycho build
 # Most common usage : A library (in Fedora) used by Tycho's runtime broke API
-%global tycho_bootstrap 1
+%global tycho_bootstrap 0
 # Set 'eclipse_bootstrap' if Eclipse from buildroot cannot help build Tycho
 # This basically provides a location for usage of pre-bundled Eclipse
 # Possible uses : Need to build Tycho before Eclipse in fresh buildroot
-%global eclipse_bootstrap 1
+%global eclipse_bootstrap 0
 # When building version under development (non-release)
 # %%global snap -SNAPSHOT
 %global snap %{nil}
@@ -464,14 +464,19 @@ ln -s %{_javadir}/tycho/org.fedoraproject.p2.jar %{buildroot}%{?_scl_prefix}%{?s
 %files -f .mfiles
 %{?_scl_prefix}%{?scl_maven:/%{scl_maven}/root}%{_root_datadir}/xmvn/lib/installer/*
 %{_javadir}-utils/p2-install.sh
+%if %{eclipse_bootstrap}
 %{_javadir}/tycho/core.*.jar
 %{_javadir}/tycho/equinox.*.jar
+%endif
 %doc README.md
 
 %files javadoc
 %{_javadocdir}/tycho
 
 %changelog
+* Thu Jul 28 2016 Mat Booth <mat.booth@redhat.com> - 0.25.0-7.5
+- Perform full non-bootstrap build
+
 * Wed Jul 27 2016 Mat Booth <mat.booth@redhat.com> - 0.25.0-7.4
 - Work around java 8 code problems properly
 
