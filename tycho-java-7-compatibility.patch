@@ -1,0 +1,186 @@
+From b6d135ecb547c70a20bc5392d1453c482b685008 Mon Sep 17 00:00:00 2001
+From: Mat Booth <mat.booth@redhat.com>
+Date: Wed, 27 Jul 2016 17:42:29 +0100
+Subject: [PATCH] Maintain Java 7 compatibility
+
+---
+ .../.settings/org.eclipse.jdt.core.prefs           |  6 +-
+ org.fedoraproject.p2/META-INF/MANIFEST.MF          |  2 +-
+ .../p2/installer/impl/DefaultEclipseInstaller.java | 64 +++++++++++++++-------
+ .../fedoraproject/p2/installer/impl/Package.java   |  9 ++-
+ 4 files changed, 56 insertions(+), 25 deletions(-)
+
+diff --git a/org.fedoraproject.p2/.settings/org.eclipse.jdt.core.prefs b/org.fedoraproject.p2/.settings/org.eclipse.jdt.core.prefs
+index 678e2bb..8d92b55 100644
+--- a/org.fedoraproject.p2/.settings/org.eclipse.jdt.core.prefs
++++ b/org.fedoraproject.p2/.settings/org.eclipse.jdt.core.prefs
+@@ -7,9 +7,9 @@ org.eclipse.jdt.core.compiler.annotation.nullable=org.eclipse.jdt.annotation.Nul
+ org.eclipse.jdt.core.compiler.annotation.nullanalysis=disabled
+ org.eclipse.jdt.core.compiler.codegen.inlineJsrBytecode=enabled
+ org.eclipse.jdt.core.compiler.codegen.methodParameters=do not generate
+-org.eclipse.jdt.core.compiler.codegen.targetPlatform=1.8
++org.eclipse.jdt.core.compiler.codegen.targetPlatform=1.7
+ org.eclipse.jdt.core.compiler.codegen.unusedLocal=preserve
+-org.eclipse.jdt.core.compiler.compliance=1.8
++org.eclipse.jdt.core.compiler.compliance=1.7
+ org.eclipse.jdt.core.compiler.debug.lineNumber=generate
+ org.eclipse.jdt.core.compiler.debug.localVariable=generate
+ org.eclipse.jdt.core.compiler.debug.sourceFile=generate
+@@ -98,4 +98,4 @@ org.eclipse.jdt.core.compiler.problem.unusedPrivateMember=warning
+ org.eclipse.jdt.core.compiler.problem.unusedTypeParameter=warning
+ org.eclipse.jdt.core.compiler.problem.unusedWarningToken=warning
+ org.eclipse.jdt.core.compiler.problem.varargsArgumentNeedCast=warning
+-org.eclipse.jdt.core.compiler.source=1.8
++org.eclipse.jdt.core.compiler.source=1.7
+diff --git a/org.fedoraproject.p2/META-INF/MANIFEST.MF b/org.fedoraproject.p2/META-INF/MANIFEST.MF
+index 4319079..2967c22 100644
+--- a/org.fedoraproject.p2/META-INF/MANIFEST.MF
++++ b/org.fedoraproject.p2/META-INF/MANIFEST.MF
+@@ -4,7 +4,7 @@ Bundle-Name: Fedora Project P2 Repository
+ Bundle-SymbolicName: org.fedoraproject.p2;singleton:=true
+ Bundle-Version: 0.0.1.qualifier
+ Bundle-Vendor: Fedora
+-Bundle-RequiredExecutionEnvironment: JavaSE-1.8
++Bundle-RequiredExecutionEnvironment: JavaSE-1.7
+ Require-Bundle: org.eclipse.core.runtime,
+  org.eclipse.equinox.p2.metadata,
+  org.eclipse.equinox.p2.repository,
+diff --git a/org.fedoraproject.p2/src/org/fedoraproject/p2/installer/impl/DefaultEclipseInstaller.java b/org.fedoraproject.p2/src/org/fedoraproject/p2/installer/impl/DefaultEclipseInstaller.java
+index deafc16..71bc18f 100644
+--- a/org.fedoraproject.p2/src/org/fedoraproject/p2/installer/impl/DefaultEclipseInstaller.java
++++ b/org.fedoraproject.p2/src/org/fedoraproject/p2/installer/impl/DefaultEclipseInstaller.java
+@@ -26,12 +26,12 @@ import java.util.List;
+ import java.util.Map;
+ import java.util.Map.Entry;
+ import java.util.Set;
+-import java.util.stream.Collectors;
+ 
+ import org.eclipse.core.runtime.NullProgressMonitor;
+ import org.eclipse.equinox.p2.metadata.IArtifactKey;
+ import org.eclipse.equinox.p2.metadata.IInstallableUnit;
+ import org.eclipse.equinox.p2.metadata.IInstallableUnitFragment;
++import org.eclipse.equinox.p2.metadata.IProvidedCapability;
+ import org.eclipse.equinox.p2.metadata.IRequirement;
+ import org.eclipse.equinox.p2.publisher.IPublisherInfo;
+ import org.eclipse.equinox.p2.publisher.IPublisherResult;
+@@ -96,13 +96,27 @@ public class DefaultEclipseInstaller implements EclipseInstaller {
+ 		Director.publish(reactorRepo, plugins, features);
+ 		reactor = reactorRepo.getAllUnits();
+ 		// Remove all host localization fragments
+-		reactor.removeAll(reactor.stream()
+-                .filter(u -> u.getId().endsWith("translated_host_properties"))
+-                .collect(Collectors.toSet()));
+-		Set<Path> reactorPaths = reactor.stream().map(u -> P2Utils.getPath(u)).collect(Collectors.toSet());
+-		request.getArtifacts().stream().filter(a -> !reactorPaths.contains(a.getPath()))
+-				.forEach(a -> logger.error("Not a valid {}: {}", a.isFeature() ? "feature" : "plugin", a.getPath()));
+-		if (reactor.stream().collect(Collectors.summingInt(u -> u.getArtifacts().size()))
++		Set<IInstallableUnit> hostLocalizationFragments = new LinkedHashSet<>();
++		for (IInstallableUnit u : reactor) {
++			if (u.getId().endsWith("translated_host_properties")) {
++				hostLocalizationFragments.add(u);
++			}
++		}
++		reactor.removeAll(hostLocalizationFragments);
++		Set<Path> reactorPaths = new LinkedHashSet<>();
++		for (IInstallableUnit u : reactor) {
++			reactorPaths.add(P2Utils.getPath(u));
++		}
++		for (EclipseArtifact a : request.getArtifacts()) {
++			if (!reactorPaths.contains(a.getPath())) {
++				logger.error("Not a valid {}: {}", a.isFeature() ? "feature" : "plugin", a.getPath());
++			}
++		}
++		int numOfArtifacts = 0;
++		for (IInstallableUnit u : reactor) {
++			numOfArtifacts += u.getArtifacts().size();
++		}
++		if (numOfArtifacts
+ 				!= plugins.size() + features.size()) {
+ 			throw new RuntimeException("Reactor contains invalid plugin or feature");
+ 		}
+@@ -113,7 +127,10 @@ public class DefaultEclipseInstaller implements EclipseInstaller {
+ 		List<Path> sclConfs = request.getConfigFiles();
+ 		if (sclConfs.isEmpty())
+ 			sclConfs = EclipseSystemLayout.getSclConfFiles();
+-		List<SCL> scls = sclConfs.stream().map(c -> new SCL(c)).collect(Collectors.toList());
++		List<SCL> scls = new LinkedList<>();
++		for (Path c : sclConfs) {
++			scls.add(new SCL(c));
++		}
+ 		index = new CompoundBundleRepository(scls);
+ 
+ 		SCL currentScl = scls.iterator().next();
+@@ -200,9 +217,9 @@ public class DefaultEclipseInstaller implements EclipseInstaller {
+ 				if (request.getBuildRoot() != null) {
+ 					Repository dropinRepo = Repository.createTemp();
+ 					Set<Path> dropinPaths = new LinkedHashSet<> (plugins);
+-					dropinPaths.addAll(
+-							symlinks.stream().map(u -> P2Utils.getPath(u))
+-									.collect(Collectors.toSet()));
++					for (IInstallableUnit symlink : symlinks) {
++						dropinPaths.add(P2Utils.getPath(symlink));
++					}
+ 					Director.publish(dropinRepo, dropinPaths, features);
+ 					createRunnableRepository(dropinRepo, request
+ 							.getBuildRoot().resolve(installationPath), content, symlinks);
+@@ -237,14 +254,23 @@ public class DefaultEclipseInstaller implements EclipseInstaller {
+ 								.get(unit);
+ 						requires.removeAll(content);
+ 						// Remove all fragments from requires generation
+-						requires.removeAll(requires.stream().filter(
+-						        r -> r.getProvidedCapabilities().stream().anyMatch(
+-						                p -> p.getNamespace().equals("osgi.fragment")))
+-                                        .collect(Collectors.toSet()));
++						Set<IInstallableUnit> fragments = new LinkedHashSet<>();
++						for (IInstallableUnit u : requires) {
++							for (IProvidedCapability p : u.getProvidedCapabilities()) {
++								if (p.getNamespace().equals("osgi.fragment")) {
++									fragments.add(u);
++									break;
++								}
++							}
++						}
++						requires.removeAll(fragments);
+ 						if (!requires.isEmpty()) {
+-							provide.setProperty("osgi.requires", requires
+-									.stream().map(u -> P2Utils.toString(u))
+-									.collect(Collectors.joining(",")));
++							StringBuffer osgiRequiresString = new StringBuffer();
++							for (IInstallableUnit u : requires) {
++								osgiRequiresString.append(",");
++								osgiRequiresString.append(P2Utils.toString(u));
++							}
++							provide.setProperty("osgi.requires", osgiRequiresString.substring(1));
+ 						}
+ 					}
+ 				}
+diff --git a/org.fedoraproject.p2/src/org/fedoraproject/p2/installer/impl/Package.java b/org.fedoraproject.p2/src/org/fedoraproject/p2/installer/impl/Package.java
+index c444cbe..ca8ee9b 100644
+--- a/org.fedoraproject.p2/src/org/fedoraproject/p2/installer/impl/Package.java
++++ b/org.fedoraproject.p2/src/org/fedoraproject/p2/installer/impl/Package.java
+@@ -19,7 +19,6 @@ import java.util.Map.Entry;
+ import java.util.Set;
+ import java.util.Stack;
+ import java.util.concurrent.atomic.AtomicInteger;
+-import java.util.stream.Collectors;
+ 
+ import org.eclipse.equinox.p2.metadata.IInstallableUnit;
+ import org.slf4j.Logger;
+@@ -137,7 +136,13 @@ public class Package {
+ 	}
+ 
+ 	private static Set<Package> splittable(Set<Package> V) {
+-		return V.stream().filter(v -> v.isSplittable && v.revdeps.size() > 1).collect(Collectors.toSet());
++		Set<Package> result = new LinkedHashSet<>();
++		for (Package v : V) {
++			if (v.isSplittable && v.revdeps.size() > 1) {
++				result.add(v);
++			}
++		}
++		return result;
+ 	}
+ 
+ 	public static void splitSplittable(Set<Package> V) {
+-- 
+2.5.5
+

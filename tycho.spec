@@ -2,7 +2,7 @@
 %{!?scl:%global pkg_name %{name}}
 %{?java_common_find_provides_and_requires}
 
-%global baserelease 3
+%global baserelease 4
 
 # Bootstrap build
 # Tycho depends on itself, and Eclipse to build but in certain cases
@@ -70,6 +70,9 @@ Patch5:         %{pkg_name}-fix-bootstrap-build.patch
 #Patch8:         tycho-maven-archiver-3.0.1.patch
 Patch9:         tycho-eclipse-neon.patch
 Patch10:        tycho-port-to-xmvn-2.1.0.patch
+# There can be no java 8 artefacts may be in the class path when building maven
+# plugins https://issues.apache.org/jira/browse/MPLUGIN-273
+Patch11:        tycho-java-7-compatibility.patch
 
 BuildArch:      noarch
 
@@ -196,6 +199,9 @@ tar -xf %{SOURCE6}
 #%patch8 -p0
 %patch9 -p0
 %patch10 -p1
+pushd fedoraproject-p2
+%patch11 -p1
+popd
 
 find tycho-core -iname '*html' -delete
 
@@ -249,10 +255,6 @@ done
 popd
 %endif
 
-# This must be provided scope when building because there can be no java 8 artefacts may be in
-# the class path when building maven plugins https://issues.apache.org/jira/browse/MPLUGIN-273
-sed -i -e '/artifactId>org.fedoraproject.p2/a<scope>provided</scope>' tycho-p2/tycho-p2-facade/pom.xml
-
 %if %{tycho_bootstrap}
 
 %patch5 -p1
@@ -264,9 +266,6 @@ cp %{SOURCE2} %{SOURCE3} .
 
 %patch5 -p1 -R
 
-# Remove provided scope from bootstrap artifact so deps can be transitively resolved
-sed -i -e '/provided/d' \
-  .m2/org/eclipse/tycho/tycho-p2-facade/%{version}-SNAPSHOT/tycho-p2-facade-%{version}-SNAPSHOT.pom
 # Non-Bootstrap Build
 %else
 
@@ -324,8 +323,6 @@ xmvn -o -DtychoBootstrapVersion=%{version}-SNAPSHOT -Dmaven.test.skip=true \
 clean install org.apache.maven.plugins:maven-javadoc-plugin:aggregate
 %{?scl:EOF}
 
-# This was needed for building only
-sed -i -e '/provided/d' tycho-p2/tycho-p2-facade/pom.xml
 
 %install
 %{?scl:scl enable %{scl_maven} %{scl} - << "EOF"}
@@ -475,6 +472,9 @@ ln -s %{_javadir}/tycho/org.fedoraproject.p2.jar %{buildroot}%{?_scl_prefix}%{?s
 %{_javadocdir}/tycho
 
 %changelog
+* Wed Jul 27 2016 Mat Booth <mat.booth@redhat.com> - 0.25.0-7.4
+- Work around java 8 code problems properly
+
 * Wed Jul 27 2016 Mat Booth <mat.booth@redhat.com> - 0.25.0-7.3
 - Add missing BR on zip for EL6
 
