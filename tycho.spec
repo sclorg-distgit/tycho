@@ -28,7 +28,7 @@
 
 Name:           %{?scl_prefix}tycho
 Version:        0.23.0
-Release:        8.2.bs4%{?dist}
+Release:        8.2%{?dist}
 Summary:        Plugins and extensions for building Eclipse plugins and OSGI bundles with Maven
 
 # license file is missing but all files having some licensing information are ASL 2.0
@@ -65,7 +65,6 @@ Patch5:         %{pkg_name}-fix-bootstrap-build.patch
 Patch6:         %{pkg_name}-port-to-jetty-9.3.0.patch
 Patch7:         %{pkg_name}-java-7-compatibility.patch
 Patch8:         %{pkg_name}-port-to-xmvn-2.1.0.patch
-Patch9:         %{pkg_name}-disable-doclint.patch
 
 BuildArch:      noarch
 
@@ -183,7 +182,6 @@ tar -xf %{SOURCE6}
 %patch6 -p0
 %patch7 -p1
 %patch8 -p1
-%patch9 -p1
 
 find tycho-core -iname '*html' -delete
 
